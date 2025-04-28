@@ -1,0 +1,32 @@
+# Makefile for Windows NMAKE
+#
+# Assumes cl.exe and link.exe are available in PATH
+#
+# must run vcvars32.bat or vcvars64.bat that comes with 
+# microsoft visual C to put the compiler on the path.
+
+CC = cl
+OPTFLAG = /O2
+CFLAGS = /nologo /W3 $(OPTFLAG)
+OBJS = crc_timing.obj pentominos.obj 3d-pentomino.obj perftest.obj
+OUT = perftest.exe
+
+all: $(OUT)
+
+$(OUT): $(OBJS)
+    link /nologo /OUT:$(OUT) $(OBJS)
+
+perftest.obj: perftest.c perftest.h makefile_windows
+    $(CC) $(CFLAGS) /c -DOPTFLAG=\"$(OPTFLAG)\" perftest.c
+
+crc_timing.obj: crc_timing.c perftest.h makefile_windows
+    $(CC) $(CFLAGS) /c crc_timing.c
+
+pentominos.obj: pentominos.c perftest.h makefile_windows
+    $(CC) $(CFLAGS) /c -DTEST_MODULE=1 pentominos.c
+
+3d-pentomino.obj: 3d-pentomino.c perftest.h makefile_windows
+	$(CC) $(CFLAGS) /c -DTEST_MODULE=1 3d-pentomino.c
+
+clean:
+    del /f /q *.obj $(OUT)
