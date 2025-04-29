@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
     printf("Matthias's little performance benchmarks\n");
 
     // String identifying which compilation and which computer running on.
-    #ifdef _WINDOWS
+    #ifdef _MSC_VER
         printf("Compiled: %dbit,  MSVC %5.2f, Optimization='%s',%s\n",(int)sizeof(int *)*8, _MSC_VER/100.0,OPTFLAG, PcName());
         sprintf(AboutString,"MSVC%d %db %-6.6s,%-14.14s", _MSC_VER/100,
               (int)sizeof(int *)*8,OPTFLAG, PcName());

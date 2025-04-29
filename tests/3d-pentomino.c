@@ -157,7 +157,7 @@ static char CharGraph[GRIDHEIGHT][GRIDWIDTH];
 
 #define CUBENUM_HILIGHT (-100)
 
-typedef int bool;
+#define bool int
 #define TRUE 1
 #define FALSE 0
 
