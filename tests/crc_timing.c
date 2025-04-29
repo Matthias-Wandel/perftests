@@ -99,7 +99,7 @@ unsigned compute_crc32_simul_n(unsigned char *data[], int length, int num, uint3
 //----------------------------------------------------------------------------
 // Compute CRC32 , using if/else statement.
 //----------------------------------------------------------------------------
-unsigned compute_crc32_if_else(unsigned char *data, int length, int *zerop)
+unsigned compute_crc32_if_else_count(unsigned char *data, int length, int *zerop)
 {
     uint32_t crc = 0xFFFFFFFF;
     const uint32_t polynomial = 0xEDB88320;
@@ -125,7 +125,7 @@ unsigned compute_crc32_if_else(unsigned char *data, int length, int *zerop)
 //----------------------------------------------------------------------------
 // Compute CRC32 , using if/else statement.
 //----------------------------------------------------------------------------
-unsigned compute_crc32_if_else_nocount(unsigned char *data, int length)
+unsigned compute_crc32_if_else(unsigned char *data, int length)
 {
     uint32_t crc = 0xFFFFFFFF;
     const uint32_t polynomial = 0xEDB88320;

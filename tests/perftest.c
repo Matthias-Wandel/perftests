@@ -147,7 +147,7 @@ unsigned char * MakeDataToCrc(int size)
 
 #define NUM_CRC_MULTI 12
 #define NUM_TESTS 6 // Not counting crc multi benchmarks
-const char * Methods[] = {"CRC Table  ", "CRC and_xor", "CRC if_else", "CRC if-nc  ",
+const char * Methods[] = {"CRC Table  ", "CRC and_xor", "CRC if_else", "CRC if-cnt ",
                           "Pentomino  ", "3dPentomino"};
 
 //----------------------------------------------------------------------------
@@ -205,10 +205,10 @@ double TimeFunction(int WhichOne, uint8_t * buffer, int size)
                     crc = compute_crc32_and_xor(addr, size_use, &zeros);
                     break;
                 case 2:
-                    crc = compute_crc32_if_else(addr, size_use, &zeros);
+                    crc = compute_crc32_if_else(addr, size_use);
                     break;
                 case 3:
-                    crc = compute_crc32_if_else_nocount(addr, size_use);
+                    crc = compute_crc32_if_else_count(addr, size_use, &zeros);
                     break;
             }
             if (iter ==0 && crc != crc0){
@@ -339,14 +339,14 @@ int main(int argc, char *argv[])
         memset(Times, 0, sizeof(Times));
         printf("Run tests:\n");
         for (a=TestStartAt;a<=10+NUM_CRC_MULTI;a++){
-            if (a<NUM_TESTS || a >= 10){
+            if (a<NUM_TESTS || a > 10){
                 Times[a] = TimeFunction(a, buffer,BufferSize);
             }
         }
 
         // Print results to console
         if (n == 0){ // Print legend
-            printf("Compiled        ,Computer      ");
+            printf("Compiled         ,Computer      ");
             for (a=0;a<NUM_TESTS;a++) printf(",%s",Methods[a]);
             printf("\n");
         }
@@ -377,7 +377,7 @@ int main(int argc, char *argv[])
         if (outfile){
             PrintTimeToFile(outfile);
             if (n == 0){ // Print legend
-                fprintf(outfile,"Compiled        ,Computer      ");
+                fprintf(outfile,"Compiled         ,Computer      ");
                 for (a=0;a<NUM_TESTS;a++) fprintf(outfile,",%s",Methods[a]);
                 fprintf(outfile,"\n");
             }
@@ -393,7 +393,7 @@ int main(int argc, char *argv[])
             fprintf(outfile,"\n");
 
             fprintf(outfile,"Cores run on:");
-            for (a=0;a<10+NUM_CRC_MULTI;a++){
+            for (a=1;a<10+NUM_CRC_MULTI;a++){
                 if (a < NUM_TESTS || a >= 10){
                     fprintf(outfile," (%d,%d)",CoresRunOn[a][0],CoresRunOn[a][1]);
                 }else{

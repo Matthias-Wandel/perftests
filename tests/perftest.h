@@ -10,8 +10,8 @@ extern int Time3dPentominoSolver(void);
 
 // crc_timing.c
 extern void init_crc32_table(void);
-extern unsigned compute_crc32_if_else(unsigned char *data, int length, int *zerop);
-extern unsigned compute_crc32_if_else_nocount(unsigned char *data, int length);
+extern unsigned compute_crc32_if_else(unsigned char *data, int length);
+extern unsigned compute_crc32_if_else_count(unsigned char *data, int length, int *zerop);
 extern unsigned compute_crc32_and_xor(unsigned char  *data, int length, int *zerop);
 extern unsigned compute_crc32_table(unsigned char  *data, int length, int * zerop);
 
