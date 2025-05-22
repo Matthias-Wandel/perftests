@@ -305,85 +305,15 @@ void SetProcessPriority(BOOL highPriority)
 #endif
 
 
+static char AboutString[100];
+static int BufferSize = 100000;
+static unsigned char *buffer;
+
 //----------------------------------------------------------------------------
-// Main
+// Run the tests
 //----------------------------------------------------------------------------
-int main(int argc, char *argv[])
+void DoTests(int TestStartAt, int TestEndAt, int Repetitions, double Times[])
 {
-    int TestStartAt = 0;
-    int TestEndAt = 10+NUM_CRC_MULTI;
-    int Repetitions = 1;
-
-    // Parse command line options
-    for (int a=1;a<argc;a++){
-        if (argv[a][0] == '-'){
-            int num = 0;
-            num = atoi(argv[a]+2);
-
-            if (argv[a][1] == 't'){
-                // For running a subset of tests, as throttling may happen
-                // before the tests are done.  Also for running individual tests
-                TestStartAt = num;
-                TestEndAt = num;
-                char * dash = strchr(argv[a]+2, '-');
-                if (dash){
-                    int e = atoi(dash+1);
-                    if (e) TestEndAt = e;
-                    TestEndAt = 20;
-                }else{
-                    TestEndAt = num;
-                }
-                printf("Run tests %d to %d\n",TestStartAt, TestEndAt);
-            }
-            if (argv[a][1] == 'r'){
-                Repetitions = num;
-                printf("Repeat %d times\n",Repetitions);
-            }
-            if (argv[a][1] == 's'){
-                PreSleep = num;
-                printf("Pre-sleep %d seconds\n",PreSleep);
-            }
-            if (argv[a][1] == 'p'){
-                #ifdef _WINDOWS
-                    SetProcessPriority(num);
-                #else
-                    printf("Priority setting unavailble in this build\n",PreSleep);
-                #endif
-            }
-            if (argv[a][1] == 'a'){
-                #ifdef _WINDOWS
-                    SetProcessorAffinity(num);
-                #else
-                    printf("Affinity setting unavailble in this build\n",PreSleep);
-                #endif
-            }
-        }
-    }
-
-    //----------------------------------------------------------------------------
-
-    printf("Matthias's little performance benchmarks\n");
-
-    char AboutString[100];
-    int BufferSize = 100000;
-    unsigned char *buffer;
-    double Times[30] = {0};
-
-    buffer = MakeDataToCrc(BufferSize+100);
-    init_crc32_table();
-
-    // String identifying which compilation and which computer running on.
-    #ifdef _MSC_VER
-        printf("Compiled: %dbit,  MSVC %5.2f, Optimization='%s',%s\n",(int)sizeof(int *)*8, _MSC_VER/100.0,OPTFLAG, PcName());
-        sprintf(AboutString,"MSVC%d %db %-6.6s,%-14.14s", _MSC_VER/100,
-              (int)sizeof(int *)*8,OPTFLAG, PcName());
-    #else
-        printf("Compiled: %dbit,  GCC %d, Optimization='%s',%s\n",(int)sizeof(int *)*8, __GNUC__,OPTFLAG, PcName());
-        sprintf(AboutString,"GCC%d %db %-6.6s,%-14.14s", __GNUC__,
-              (int)sizeof(int *)*8,OPTFLAG, PcName());
-    #endif
-
-
     FILE * outfile = stdout;
     // Time the different tests
     memset(Times, 0, sizeof(Times));
@@ -457,6 +387,81 @@ int main(int argc, char *argv[])
         printf("ERROR!  ERROR!  Unable to open results file for writing!\n");
     }
 
+}
+
+
+//----------------------------------------------------------------------------
+// Main
+//----------------------------------------------------------------------------
+int main(int argc, char *argv[])
+{
+    int TestStartAt = 0;
+    int TestEndAt = 10+NUM_CRC_MULTI;
+    int Repetitions = 1;
+
+    // Parse command line options
+    for (int a=1;a<argc;a++){
+        if (argv[a][0] == '-'){
+            int num = 0;
+            num = atoi(argv[a]+2);
+
+            if (argv[a][1] == 't'){
+                // For running a subset of tests, as throttling may happen
+                // before the tests are done.  Also for running individual tests
+                TestStartAt = num;
+                TestEndAt = num;
+                char * dash = strchr(argv[a]+2, '-');
+                if (dash){
+                    int e = atoi(dash+1);
+                    if (e) TestEndAt = e;
+                    TestEndAt = 20;
+                }else{
+                    TestEndAt = num;
+                }
+                printf("Run tests %d to %d\n",TestStartAt, TestEndAt);
+            }
+            if (argv[a][1] == 'r'){
+                Repetitions = num;
+                printf("Repeat %d times\n",Repetitions);
+            }
+            if (argv[a][1] == 's'){
+                PreSleep = num;
+                printf("Pre-sleep %d seconds\n",PreSleep);
+            }
+            if (argv[a][1] == 'p'){
+                #ifdef _WINDOWS
+                    SetProcessPriority(num);
+                #else
+                    printf("Priority setting unavailble in this build\n",PreSleep);
+                #endif
+            }
+            if (argv[a][1] == 'a'){
+                #ifdef _WINDOWS
+                    SetProcessorAffinity(num);
+                #else
+                    printf("Affinity setting unavailble in this build\n",PreSleep);
+                #endif
+            }
+        }
+    }
+    printf("Matthias's little performance benchmarks\n");
+
+    buffer = MakeDataToCrc(BufferSize+100);
+    init_crc32_table();
+
+    // String identifying which compilation and which computer running on.
+    #ifdef _MSC_VER
+        printf("Compiled: %dbit,  MSVC %5.2f, Optimization='%s',%s\n",(int)sizeof(int *)*8, _MSC_VER/100.0,OPTFLAG, PcName());
+        sprintf(AboutString,"MSVC%d %db %-6.6s,%-14.14s", _MSC_VER/100,
+              (int)sizeof(int *)*8,OPTFLAG, PcName());
+    #else
+        printf("Compiled: %dbit,  GCC %d, Optimization='%s',%s\n",(int)sizeof(int *)*8, __GNUC__,OPTFLAG, PcName());
+        sprintf(AboutString,"GCC%d %db %-6.6s,%-14.14s", __GNUC__,
+              (int)sizeof(int *)*8,OPTFLAG, PcName());
+    #endif
+
+    double Times[30] = {0};
+
+    DoTests(TestStartAt, TestEndAt, Repetitions, Times);
     free(buffer);
-    return 0;
 }
