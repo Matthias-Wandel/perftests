@@ -270,6 +270,25 @@ double TimeFunction(int WhichOne, uint8_t * buffer, int size)
 }
 
 
+#ifdef _WINDOWS
+void SetProcessorAffinity(int n) {
+    DWORD_PTR mask = 1ULL << n; 
+
+    HANDLE thread = GetCurrentThread();
+    DWORD_PTR result = SetThreadAffinityMask(thread, mask);
+
+    if (result == 0) {
+        // Failed
+        DWORD error = GetLastError();
+        printf("Failed to set affinity. Error code: %lu\n", error);
+    } else {
+        // Success
+        printf("Affinity successfully set to processor %d\n",n);
+    }
+}
+#endif
+
+
 //----------------------------------------------------------------------------
 // Main
 //----------------------------------------------------------------------------
@@ -280,6 +299,7 @@ int main(int argc, char *argv[])
     int a;
     int BufferSize = 100000;
     int TestStartAt = 0;
+    int TestEndAt = 10+NUM_CRC_MULTI;
     int Repetitions = 1;
     int n;
     char AboutString[100];
@@ -291,19 +311,22 @@ int main(int argc, char *argv[])
     for (a=1;a<argc;a++){
         if (argv[a][0] == '-'){
             int num = 0;
-            if (argv[a][1] && argv[a][2] >= '0' && argv[a][2] <= '9'){
-                // Just look at first digit (0-9 only)
-                num = argv[a][2]-'0';
-                if (argv[a][3] >= '0' && argv[a][3] <= '9')
-                    num = num*10 + argv[a][3]-'0';
-            }
+            num = atoi(argv[a]+2);
 
             if (argv[a][1] == 't'){
-                // This option to run later test in the sequence on their own
-                // as my win11 i9 pcwill often switch to an efficiency core
-                // before the full set of tests completes.
+                // For running a subset of tests, as throttling may happen
+                // before the tests are done.  Also for running individual tests
                 TestStartAt = num;
-                printf("Start at test %d\n",TestStartAt);
+                TestEndAt = num;
+                char * dash = strchr(argv[a]+2, '-');
+                if (dash){
+                    int e = atoi(dash+1);
+                    if (e) TestEndAt = e;
+                    TestEndAt = 20;
+                }else{
+                    TestEndAt = num;
+                }
+                printf("Run tests %d to %d\n",TestStartAt, TestEndAt);
             }
             if (argv[a][1] == 'r'){
                 Repetitions = num;
@@ -312,6 +335,13 @@ int main(int argc, char *argv[])
             if (argv[a][1] == 's'){
                 PreSleep = num;
                 printf("Pre-sleep %d seconds\n",PreSleep);
+            }
+            if (argv[a][1] == 'a'){
+                #ifdef _WINDOWS
+                    SetProcessorAffinity(num);
+                #else
+                    printf("Affinity setting unavailble in this build\n",PreSleep);
+                #endif
             }
         }
     }
@@ -331,81 +361,79 @@ int main(int argc, char *argv[])
     #endif
 
 
-
-
-    for (n=0;n<Repetitions;n++){ // Test suite repetitions.
-        FILE * outfile = stdout;
-        // Time the different tests
-        memset(Times, 0, sizeof(Times));
-        printf("Run tests:\n");
-        for (a=TestStartAt;a<=10+NUM_CRC_MULTI;a++){
-            if (a<NUM_TESTS || a > 10){
+    FILE * outfile = stdout;
+    // Time the different tests
+    memset(Times, 0, sizeof(Times));
+    printf("Run tests:\n");
+    for (a=TestStartAt;a<=TestEndAt;a++){
+        if (a<NUM_TESTS || a > 10){
+            for (int r=0; r<Repetitions;r++){
                 Times[a] = TimeFunction(a, buffer,BufferSize);
             }
         }
+    }
 
-        // Print results to console
-        if (n == 0){ // Print legend
-            printf("Compiled         ,Computer      ");
-            for (a=0;a<NUM_TESTS;a++) printf(",%s",Methods[a]);
-            printf("\n");
-        }
-
-        printf("%s",AboutString);
-        // Print the timing results.
-        for (a=0;a<NUM_TESTS;a++) printf(", %10.3f",Times[a]);
+    // Print results to console
+    if (n == 0){ // Print legend
+        printf("Compiled         ,Computer      ");
+        for (a=0;a<NUM_TESTS;a++) printf(",%s",Methods[a]);
         printf("\n");
+    }
 
-        printf("%s,CRCMulti",AboutString);
-        // Print the timing results.
-        for (a=0;a<12;a++) printf(",%6.3f",Times[a+10]);
-        printf("\n");
+    printf("%s",AboutString);
+    // Print the timing results.
+    for (a=0;a<NUM_TESTS;a++) printf(", %10.3f",Times[a]);
+    printf("\n");
+
+    printf("%s,CRCMulti",AboutString);
+    // Print the timing results.
+    for (a=0;a<12;a++) printf(",%6.3f",Times[a+10]);
+    printf("\n");
 
 
-        // Print results to file.
-        #ifndef _WINDOWS
-            DumpLinuxSystemInfo("results.csv");
-        #endif
+    // Print results to file.
+    #ifndef _WINDOWS
+        DumpLinuxSystemInfo("results.csv");
+    #endif
+    outfile = fopen("results.csv","a");
+    if (!outfile){
+        // If file is busy, try again in half a second.
+        // cause I like to run this on multiple computers at the same time.
+        Sleep(500);
+        printf("Retry out file open\n");
         outfile = fopen("results.csv","a");
-        if (!outfile){
-            // If file is busy, try again in half a second.
-            // cause I like to run this on multiple computers at the same time.
-            Sleep(500);
-            printf("Retry out file open\n");
-            outfile = fopen("results.csv","a");
+    }
+    if (outfile){
+        PrintTimeToFile(outfile);
+        if (n == 0){ // Print legend
+            fprintf(outfile,"Compiled         ,Computer      ");
+            for (a=0;a<NUM_TESTS;a++) fprintf(outfile,",%s",Methods[a]);
+            fprintf(outfile,"\n");
         }
-        if (outfile){
-            PrintTimeToFile(outfile);
-            if (n == 0){ // Print legend
-                fprintf(outfile,"Compiled         ,Computer      ");
-                for (a=0;a<NUM_TESTS;a++) fprintf(outfile,",%s",Methods[a]);
-                fprintf(outfile,"\n");
+
+        fprintf(outfile, "%s", AboutString);
+        // Print the timing results.
+        for (a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]);
+        fprintf(outfile,"\n");
+
+        fprintf(outfile, "%s,CRCMulti",AboutString);
+        // Print the timing results.
+        for (a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]);
+        fprintf(outfile,"\n");
+
+        fprintf(outfile,"Cores run on:");
+        for (a=1;a<10+NUM_CRC_MULTI;a++){
+            if (a < NUM_TESTS || a >= 10){
+                fprintf(outfile," (%d,%d)",CoresRunOn[a][0],CoresRunOn[a][1]);
+            }else{
+                fprintf(outfile," ");
             }
-
-            fprintf(outfile, "%s", AboutString);
-            // Print the timing results.
-            for (a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]);
-            fprintf(outfile,"\n");
-
-            fprintf(outfile, "%s,CRCMulti",AboutString);
-            // Print the timing results.
-            for (a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]);
-            fprintf(outfile,"\n");
-
-            fprintf(outfile,"Cores run on:");
-            for (a=1;a<10+NUM_CRC_MULTI;a++){
-                if (a < NUM_TESTS || a >= 10){
-                    fprintf(outfile," (%d,%d)",CoresRunOn[a][0],CoresRunOn[a][1]);
-                }else{
-                    fprintf(outfile," ");
-                }
-            }
-            fprintf(outfile,"\n");
-
-            fclose(outfile);
-        }else{
-            printf("ERROR!  ERROR!  Unable to open results file for writing!\n");
         }
+        fprintf(outfile,"\n");
+
+        fclose(outfile);
+    }else{
+        printf("ERROR!  ERROR!  Unable to open results file for writing!\n");
     }
 
     free(buffer);
