@@ -271,8 +271,9 @@ double TimeFunction(int WhichOne, uint8_t * buffer, int size)
 
 
 #ifdef _WINDOWS
-void SetProcessorAffinity(int n) {
-    DWORD_PTR mask = 1ULL << n; 
+void SetProcessorAffinity(int n)
+{
+    DWORD_PTR mask = 1ULL << n;
 
     HANDLE thread = GetCurrentThread();
     DWORD_PTR result = SetThreadAffinityMask(thread, mask);
@@ -286,6 +287,21 @@ void SetProcessorAffinity(int n) {
         printf("Affinity successfully set to processor %d\n",n);
     }
 }
+
+void SetProcessPriority(BOOL highPriority)
+{
+    HANDLE hProc = GetCurrentProcess();
+    DWORD desiredClass = highPriority?HIGH_PRIORITY_CLASS:IDLE_PRIORITY_CLASS;
+
+    if (!SetPriorityClass(hProc, desiredClass)) {
+        DWORD err = GetLastError();
+        fprintf(stderr, "Failed to set process priority (%lu)\n", err);
+    } else {
+        printf("Process priority set to %s_PRIORITY_CLASS\n",
+               highPriority ? "HIGH" : "IDLE");
+    }
+}
+
 #endif
 
 
@@ -294,21 +310,12 @@ void SetProcessorAffinity(int n) {
 //----------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-    unsigned char *buffer;
-    double Times[30];
-    int a;
-    int BufferSize = 100000;
     int TestStartAt = 0;
     int TestEndAt = 10+NUM_CRC_MULTI;
     int Repetitions = 1;
-    int n;
-    char AboutString[100];
-
-    buffer = MakeDataToCrc(BufferSize+100);
-    init_crc32_table();
 
     // Parse command line options
-    for (a=1;a<argc;a++){
+    for (int a=1;a<argc;a++){
         if (argv[a][0] == '-'){
             int num = 0;
             num = atoi(argv[a]+2);
@@ -336,6 +343,13 @@ int main(int argc, char *argv[])
                 PreSleep = num;
                 printf("Pre-sleep %d seconds\n",PreSleep);
             }
+            if (argv[a][1] == 'p'){
+                #ifdef _WINDOWS
+                    SetProcessPriority(num);
+                #else
+                    printf("Priority setting unavailble in this build\n",PreSleep);
+                #endif
+            }
             if (argv[a][1] == 'a'){
                 #ifdef _WINDOWS
                     SetProcessorAffinity(num);
@@ -346,8 +360,17 @@ int main(int argc, char *argv[])
         }
     }
 
+    //----------------------------------------------------------------------------
 
     printf("Matthias's little performance benchmarks\n");
+
+    char AboutString[100];
+    int BufferSize = 100000;
+    unsigned char *buffer;
+    double Times[30] = {0};
+
+    buffer = MakeDataToCrc(BufferSize+100);
+    init_crc32_table();
 
     // String identifying which compilation and which computer running on.
     #ifdef _MSC_VER
@@ -365,29 +388,28 @@ int main(int argc, char *argv[])
     // Time the different tests
     memset(Times, 0, sizeof(Times));
     printf("Run tests:\n");
-    for (a=TestStartAt;a<=TestEndAt;a++){
+    for (int a=TestStartAt;a<=TestEndAt;a++){
         if (a<NUM_TESTS || a > 10){
             for (int r=0; r<Repetitions;r++){
-                Times[a] = TimeFunction(a, buffer,BufferSize);
+                Times[a] += TimeFunction(a, buffer,BufferSize);
             }
         }
     }
 
     // Print results to console
-    if (n == 0){ // Print legend
-        printf("Compiled         ,Computer      ");
-        for (a=0;a<NUM_TESTS;a++) printf(",%s",Methods[a]);
-        printf("\n");
-    }
+
+    printf("Compiled         ,Computer      ");
+    for (int a=0;a<NUM_TESTS;a++) printf(",%s",Methods[a]);
+    printf("\n");
 
     printf("%s",AboutString);
     // Print the timing results.
-    for (a=0;a<NUM_TESTS;a++) printf(", %10.3f",Times[a]);
+    for (int a=0;a<NUM_TESTS;a++) printf(", %10.3f",Times[a]);
     printf("\n");
 
     printf("%s,CRCMulti",AboutString);
     // Print the timing results.
-    for (a=0;a<12;a++) printf(",%6.3f",Times[a+10]);
+    for (int a=0;a<12;a++) printf(",%6.3f",Times[a+10]);
     printf("\n");
 
 
@@ -405,24 +427,23 @@ int main(int argc, char *argv[])
     }
     if (outfile){
         PrintTimeToFile(outfile);
-        if (n == 0){ // Print legend
-            fprintf(outfile,"Compiled         ,Computer      ");
-            for (a=0;a<NUM_TESTS;a++) fprintf(outfile,",%s",Methods[a]);
-            fprintf(outfile,"\n");
-        }
+        // Print legend
+        fprintf(outfile,"Compiled         ,Computer      ");
+        for (int a=0;a<NUM_TESTS;a++) fprintf(outfile,",%s",Methods[a]);
+        fprintf(outfile,"\n");
 
         fprintf(outfile, "%s", AboutString);
         // Print the timing results.
-        for (a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]);
+        for (int a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]);
         fprintf(outfile,"\n");
 
         fprintf(outfile, "%s,CRCMulti",AboutString);
         // Print the timing results.
-        for (a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]);
+        for (int a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]);
         fprintf(outfile,"\n");
 
         fprintf(outfile,"Cores run on:");
-        for (a=1;a<10+NUM_CRC_MULTI;a++){
+        for (int a=1;a<10+NUM_CRC_MULTI;a++){
             if (a < NUM_TESTS || a >= 10){
                 fprintf(outfile," (%d,%d)",CoresRunOn[a][0],CoresRunOn[a][1]);
             }else{
