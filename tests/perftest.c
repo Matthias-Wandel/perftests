@@ -332,7 +332,7 @@ void PrintResults(FILE * outfile)
         if (TestStartAt < 10){
             fprintf(outfile,"%s",AboutString);
             // Print the timing results.
-            for (int a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]);
+            for (int a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]/Repetitions);
             fprintf(outfile,"\n");
 
             fprintf(outfile,"Cores run on:");
@@ -350,7 +350,7 @@ void PrintResults(FILE * outfile)
         if (TestEndAt > 10){
             fprintf(outfile,"%s,CRCMulti",AboutString);
             // Print the timing results.
-            for (int a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]);
+            for (int a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]/Repetitions);
             fprintf(outfile,"\n");
             fprintf(outfile,"Cores run on:");
             for (int a=10;a<22;a++){
