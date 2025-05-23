@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <memory.h>
 #include <time.h>
+#include <windows.h>
 #include "perftest.h"
 
 #define COMBINED_CHECK  // Makes it in 48 seconds on my Celeron 500
@@ -19,6 +20,8 @@ typedef unsigned short WORD;
 #define FALSE 0
 #define TRUE 1
 //#pragma pack(push,1)
+
+#define thread_local __declspec(thread) 
 
 typedef struct {
     BYTE Used[5][8];
@@ -55,17 +58,14 @@ Piece_t * Originals[] = {
     (Piece_t *) Pc11,
 };
 
-// Each of 12 pieces has up to 8 varians for how it can be placed.
-Piece_t Variants[12][8];
-int NumVariants[12];   // Number of variants.
+// Each of 12 pieces has up to 8 variants for how it can be placed.
+thread_local Piece_t Variants[12][8];
+thread_local int NumVariants[12];   // Number of variants.
 
 typedef struct {
     BYTE Pos[12][8];   // Grid for where the pieces go.
     BYTE Placed[12];   // These pieces are already placed.
 }Field_t;
-
-void TryPieces(Field_t * Field);
-
 
 //--------------------------------------------------------------------------
 // Show a piece.
@@ -209,9 +209,9 @@ void FlipPiece(Piece_t * Dest, Piece_t * Src)
 
 
 
-int GlobalPlaces = 0;
-int GlobalAlmost = 0;
-int GlobalSolutions = 0;
+thread_local int GlobalPlaces = 0;
+thread_local int GlobalAlmost = 0;
+thread_local int GlobalSolutions = 0;
 //--------------------------------------------------------------------------
 // The recursive searching function...
 //--------------------------------------------------------------------------

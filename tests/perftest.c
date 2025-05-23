@@ -42,8 +42,12 @@
 #endif
 #include "perftest.h"
 
-int PreSleep = 0;
-int CoresRunOn[30][2];
+typedef struct {
+    int Affinity;
+    double Times[30];
+    int CoresRunOn[30][2];
+}ThreadPassParms_t;
+
 
 //----------------------------------------------------------------------------
 // Get computer name for logging purposes.
@@ -85,33 +89,6 @@ char * PcName(void)
 #endif
 }
 
-#ifndef _WINDOWS
-//----------------------------------------------------------------------------
-// Dump more info about the system to the file
-// if its not me running the test, hard to get that info after the fact
-//----------------------------------------------------------------------------
-void DumpLinuxSystemInfo(char * filename)
-{
-    struct utsname userinfo;
-    FILE * outfile;
-
-    outfile = fopen(filename,"a");
-    if(outfile){
-        fprintf(outfile,"------------------------------------------------\n");
-        if(uname(&userinfo)>=0){
-            fprintf(outfile,"System Name:%s    Node:%s\n",userinfo.sysname,userinfo.nodename);
-            fprintf(outfile,"System Release:%s   Version: %s\n",userinfo.release,userinfo.version);
-            fprintf(outfile,"Machine: %s\n",userinfo.machine);
-        }else{
-            fprintf(outfile,"System details fetch failed..\n");
-        }
-        fclose(outfile);
-    }
-    if (system("lscpu >> results.csv")){
-        printf("Error: lscpu failed\n");
-    }
-}
-#endif
 
 //----------------------------------------------------------------------------
 // Put the time into the output file
@@ -153,7 +130,7 @@ const char * Methods[] = {"CRC Table  ", "CRC and_xor", "CRC if_else", "CRC if-c
 //----------------------------------------------------------------------------
 // Time various routines
 //----------------------------------------------------------------------------
-double TimeFunction(int WhichOne, uint8_t * buffer, int size)
+double TimeFunction(int WhichOne, int * CoresRunOn, uint8_t * buffer, int size)
 {
     static int crc0=0;
     double duration_sec;
@@ -166,19 +143,6 @@ double TimeFunction(int WhichOne, uint8_t * buffer, int size)
         LARGE_INTEGER freq_t, start_t, end_t;
     #endif
 
-
-    if (PreSleep){
-        // Pre-sleeping bumps program to a slower "efficiency core"
-        // with core i9 and windows 11
-        printf("(sleep %ds)  ",PreSleep);
-        Sleep(PreSleep*1000);
-    }
-
-    if (WhichOne < NUM_TESTS){
-        printf("%s",Methods[WhichOne]);
-    }else{
-        printf("CRC-MULTI %2d",WhichOne-10);
-    }
     core_start = GetCurrentProcessorNumber();
 
     #ifdef _WINDOWS
@@ -260,11 +224,18 @@ double TimeFunction(int WhichOne, uint8_t * buffer, int size)
 
     core_after = GetCurrentProcessorNumber();
 
-    printf(", Core %2d-%2d",core_start,core_after);
-    printf(", Time: %6.3f s\n",duration_sec);
+    const char * str = NULL;
+    if (WhichOne < NUM_TESTS){
+        str = Methods[WhichOne];
+    }else{
+        char strbuf[20];
+        sprintf(strbuf,"CRC_MULTI %2d",WhichOne-10);
+        str = strbuf;
+    }
+    printf("%s, Core %2d-%2d, Time: %6.3f s\n",str,core_start,core_after,duration_sec);
 
-    CoresRunOn[WhichOne][0] = core_start;
-    CoresRunOn[WhichOne][1] = core_after;
+    CoresRunOn[0] = core_start;
+    CoresRunOn[1] = core_after;
 
     return duration_sec;
 }
@@ -284,7 +255,7 @@ void SetProcessorAffinity(int n)
         printf("Failed to set affinity. Error code: %lu\n", error);
     } else {
         // Success
-        printf("Affinity successfully set to processor %d\n",n);
+        printf("Affinity set to processor %d\n",n);
     }
 }
 
@@ -301,7 +272,6 @@ void SetProcessPriority(BOOL highPriority)
                highPriority ? "HIGH" : "IDLE");
     }
 }
-
 #endif
 
 
@@ -309,84 +279,111 @@ static char AboutString[100];
 static int BufferSize = 100000;
 static unsigned char *buffer;
 
+static int TestStartAt = 0;
+static int TestEndAt = 10+NUM_CRC_MULTI;
+static int Repetitions = 1;
+static int Priority = -1;
+
 //----------------------------------------------------------------------------
-// Run the tests
+// Run the tests.
+// There may be multiple instances of this running at the same time
 //----------------------------------------------------------------------------
-void DoTests(int TestStartAt, int TestEndAt, int Repetitions, double Times[])
+DWORD WINAPI DoTests(LPVOID param)
 {
-    FILE * outfile = stdout;
+    ThreadPassParms_t * Parms = param;
+
+    int Affinity = Parms->Affinity;
+    if (Affinity > 0) SetProcessorAffinity(Affinity);
+    if (Priority >= 0) SetProcessPriority(Priority);
+
     // Time the different tests
-    memset(Times, 0, sizeof(Times));
-    printf("Run tests:\n");
     for (int a=TestStartAt;a<=TestEndAt;a++){
         if (a<NUM_TESTS || a > 10){
             for (int r=0; r<Repetitions;r++){
-                Times[a] += TimeFunction(a, buffer,BufferSize);
+                Parms->Times[a] += TimeFunction(a, Parms->CoresRunOn[a],buffer,BufferSize);
             }
         }
     }
 
-    // Print results to console
+    return 0;
+}
 
-    printf("Compiled         ,Computer      ");
-    for (int a=0;a<NUM_TESTS;a++) printf(",%s",Methods[a]);
-    printf("\n");
-
-    printf("%s",AboutString);
-    // Print the timing results.
-    for (int a=0;a<NUM_TESTS;a++) printf(", %10.3f",Times[a]);
-    printf("\n");
-
-    printf("%s,CRCMulti",AboutString);
-    // Print the timing results.
-    for (int a=0;a<12;a++) printf(",%6.3f",Times[a+10]);
-    printf("\n");
+#define MAX_PROCESSES 32
+ThreadPassParms_t Parms[MAX_PROCESSES] = {0};
+int ProcessorAffinities[MAX_PROCESSES] = {-1};
+int NumAffinities = 0;
 
 
-    // Print results to file.
-    #ifndef _WINDOWS
-        DumpLinuxSystemInfo("results.csv");
-    #endif
-    outfile = fopen("results.csv","a");
-    if (!outfile){
-        // If file is busy, try again in half a second.
-        // cause I like to run this on multiple computers at the same time.
-        Sleep(500);
-        printf("Retry out file open\n");
-        outfile = fopen("results.csv","a");
-    }
-    if (outfile){
-        PrintTimeToFile(outfile);
-        // Print legend
+//----------------------------------------------------------------------------
+// Print summary of overall results
+//----------------------------------------------------------------------------
+void PrintResults(FILE * outfile)
+{
+    int nres = NumAffinities? NumAffinities : 1;
+
+    for (int n=0;n<nres;n++){
+        double * Times = Parms[n].Times;
+        int (*CoresRunOn)[2] = Parms[n].CoresRunOn;
+
         fprintf(outfile,"Compiled         ,Computer      ");
         for (int a=0;a<NUM_TESTS;a++) fprintf(outfile,",%s",Methods[a]);
         fprintf(outfile,"\n");
 
-        fprintf(outfile, "%s", AboutString);
-        // Print the timing results.
-        for (int a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]);
-        fprintf(outfile,"\n");
+        if (TestStartAt < 10){
+            fprintf(outfile,"%s",AboutString);
+            // Print the timing results.
+            for (int a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]);
+            fprintf(outfile,"\n");
 
-        fprintf(outfile, "%s,CRCMulti",AboutString);
-        // Print the timing results.
-        for (int a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]);
-        fprintf(outfile,"\n");
-
-        fprintf(outfile,"Cores run on:");
-        for (int a=1;a<10+NUM_CRC_MULTI;a++){
-            if (a < NUM_TESTS || a >= 10){
-                fprintf(outfile," (%d,%d)",CoresRunOn[a][0],CoresRunOn[a][1]);
-            }else{
-                fprintf(outfile," ");
+            fprintf(outfile,"Cores run on:");
+            for (int a=1;a<NUM_TESTS;a++){
+                if (CoresRunOn[a][0]==CoresRunOn[a][1]){
+                    fprintf(outfile," %d,",CoresRunOn[a][0]);
+                }else{
+                    fprintf(outfile," %d->%d,",CoresRunOn[a][0],CoresRunOn[a][1]);
+                }
             }
+            fprintf(outfile,"\n");
+
+        }
+
+        if (TestEndAt > 10){
+            fprintf(outfile,"%s,CRCMulti",AboutString);
+            // Print the timing results.
+            for (int a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]);
+            fprintf(outfile,"\n");
+            fprintf(outfile,"Cores run on:");
+            for (int a=10;a<22;a++){
+                if (CoresRunOn[a][0]==CoresRunOn[a][1]){
+                    fprintf(outfile," %d,",CoresRunOn[a][0]);
+                }else{
+                    fprintf(outfile," %d->%d,",CoresRunOn[a][0],CoresRunOn[a][1]);
+                }
+            }
+            fprintf(outfile,"\n");
         }
         fprintf(outfile,"\n");
-
-        fclose(outfile);
-    }else{
-        printf("ERROR!  ERROR!  Unable to open results file for writing!\n");
     }
+}
 
+//----------------------------------------------------------------------------
+// Show command line options
+//----------------------------------------------------------------------------
+void Usage(void)
+{
+    printf("Matthias's little performance benchmark suite\n"
+           "Uage: perftest <options>\n"
+           "Options are:\n"
+           "   -t[n]       Run only test [n]\n"
+           "   -t[s]-[e]   Run only test [s] thru [e]\n"
+           "   -r[n]       Repeat each thest [n] times\n"
+           "   -p1         Set to run as high priority\n"
+           "   -p0         Set to run as background priority\n"
+           "   -a[n]       Set pricessor affinity to [n].  To run\n"
+           "               multiple threads, specify -a[n] more than once.\n"
+           "               if [n] is -1, this means any thread\n"
+           );
+    exit(-1);
 }
 
 
@@ -395,55 +392,62 @@ void DoTests(int TestStartAt, int TestEndAt, int Repetitions, double Times[])
 //----------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-    int TestStartAt = 0;
-    int TestEndAt = 10+NUM_CRC_MULTI;
-    int Repetitions = 1;
-
     // Parse command line options
     for (int a=1;a<argc;a++){
         if (argv[a][0] == '-'){
             int num = 0;
             num = atoi(argv[a]+2);
 
-            if (argv[a][1] == 't'){
+            switch(argv[a][1]){
+            case 't':
                 // For running a subset of tests, as throttling may happen
                 // before the tests are done.  Also for running individual tests
                 TestStartAt = num;
                 TestEndAt = num;
                 char * dash = strchr(argv[a]+2, '-');
                 if (dash){
+                    TestEndAt = 20;
                     int e = atoi(dash+1);
                     if (e) TestEndAt = e;
-                    TestEndAt = 20;
                 }else{
                     TestEndAt = num;
                 }
                 printf("Run tests %d to %d\n",TestStartAt, TestEndAt);
-            }
-            if (argv[a][1] == 'r'){
+                break;
+
+            case 'r':
                 Repetitions = num;
                 printf("Repeat %d times\n",Repetitions);
-            }
-            if (argv[a][1] == 's'){
-                PreSleep = num;
-                printf("Pre-sleep %d seconds\n",PreSleep);
-            }
-            if (argv[a][1] == 'p'){
-                #ifdef _WINDOWS
-                    SetProcessPriority(num);
-                #else
-                    printf("Priority setting unavailble in this build\n",PreSleep);
+                break;
+
+            case 'p':
+                Priority = num;
+                #ifndef _WINDOWS
+                    printf("Priority setting unavailble in this build\n");
                 #endif
+                break;
+
+            case 'a':
+                if (NumAffinities < MAX_PROCESSES){
+                    ProcessorAffinities[NumAffinities++] = num;
+                    #ifndef _WINDOWS
+                        printf("Affinity setting unavailble in this build\n");
+                    #endif
+                }else{
+                    printf("Too many affinities specified");
+                }
+                break;
+            default:
+                printf("Argumant '%s' not understoond\n",argv[a]);
+                Usage();
             }
-            if (argv[a][1] == 'a'){
-                #ifdef _WINDOWS
-                    SetProcessorAffinity(num);
-                #else
-                    printf("Affinity setting unavailble in this build\n",PreSleep);
-                #endif
-            }
+        }else{
+            printf("Argumant '%s' not understoond\n",argv[a]);
+            Usage();
         }
     }
+
+
     printf("Matthias's little performance benchmarks\n");
 
     buffer = MakeDataToCrc(BufferSize+100);
@@ -460,8 +464,64 @@ int main(int argc, char *argv[])
               (int)sizeof(int *)*8,OPTFLAG, PcName());
     #endif
 
-    double Times[30] = {0};
 
-    DoTests(TestStartAt, TestEndAt, Repetitions, Times);
+    if (NumAffinities <= 1){
+        Parms[0].Affinity = ProcessorAffinities[0];
+        DoTests(&Parms[0]);
+    }else{
+#if 0 // Posix method, untested.
+        Pthread_t threads[MAX_PROCESSES];
+
+        for (int a=0;a<NumAffinities;a++){
+            Parms[a].Affinity = ProcessorAffinities[a];
+            if (pthread_create(&threads[a], NULL, DoTests, &Parms[a]) != 0) {
+                perror("pthread_create");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        printf("Threads launched\n")
+        // Wait for all threads to finish
+        for (int a = 0; a < NumAffinities; a++) {
+            pthread_join(threads[a], NULL);
+            printf("thread %d done\n",a);
+        }
+#else
+        HANDLE threads[MAX_PROCESSES];
+        for (int a=0;a<NumAffinities;a++){
+            Parms[a].Affinity = ProcessorAffinities[a];
+
+            threads[a] = CreateThread(
+                NULL,        // Default security attributes
+                0,           // Default stack size
+                DoTests,     // Thread function
+                &Parms[a], // Argument to thread function
+                0,           // Default creation flags
+                NULL         // Thread ID not needed
+            );
+            Sleep(20);
+        }
+        printf("Threads launched\n");
+
+        // Wait for all threads to finish
+        WaitForMultipleObjects(NumAffinities, threads, TRUE, INFINITE);
+
+#endif
+    }
     free(buffer);
+
+    PrintResults(stdout);
+
+    // Then print the results to a file.
+    FILE * outfile = fopen("results.csv","a");
+    if (!outfile){
+        Sleep(500); // If file is busy, try again in half a second.
+                    // cause sometimes I run it on multiple computers on a network drive.
+        printf("Retry output file open\n");
+        outfile = fopen("results.csv","a");
+    }
+    if (outfile){
+        PrintResults(outfile);
+        fclose(outfile);
+    }
 }

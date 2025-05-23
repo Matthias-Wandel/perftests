@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <memory.h>
 #include <stdlib.h>
+#include <windows.h>
+#define thread_local __declspec(thread) 
 
 // Always make X size the largest for faster solving.
 // A map of x*y*z = 10*5*3 solves fastest
@@ -17,65 +19,15 @@
 #define FIELD_Y_SIZE 5
 #define FIELD_Z_SIZE 5
 
-//#define INCLUDE_HEXOMINOS 1
 typedef struct {
     struct {
         char x,y,z;
     }cubes[6];
 }PieceList_t;
 
-
-#ifdef INCLUDE_HEXOMINOS
-    #define   NUM_PIECES  (31+29)
-#else
-    #define   NUM_PIECES  (31)
-#endif
+#define   NUM_PIECES  (31)
 
 PieceList_t Pieces[NUM_PIECES] = {
-#ifdef INCLUDE_HEXOMINOS
-    // Some hexominos
-    {{{0,0,0}, {1,0,0}, {0,0,1}, {0,0,2}, {0,0,3}, {0,1,3}}},// Long twisted hook
-    {{{0,0,0}, {0,1,0}, {0,0,1}, {0,0,2}, {0,0,3}, {1,0,3}}},// Long twisted hook mirror
-
-    {{{0,0,0}, {1,0,0}, {1,1,0}, {1,2,0}, {1,2,1}, {2,2,1}}},// offset S
-    {{{0,0,1}, {1,0,1}, {1,1,1}, {1,2,1}, {1,2,0}, {2,2,0}}},// Offset S mirror
-
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {0,0,1}, {0,0,2}, {0,1,2}}},// L with side hook
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {0,0,1}, {0,0,2}, {2,1,0}}},// L with side hook mirror
-
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {0,0,1}, {0,0,2}, {0,1,1}}},// Long arm twisted R
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {0,0,1}, {0,0,2}, {1,1,0}}},// Long arm twisted R mirror
-
-    {{{0,0,0}, {0,1,0}, {0,2,0}, {0,3,0}, {1,3,1}, {0,3,1}}},// Twisted hook long
-    {{{0,0,0}, {0,1,0}, {0,2,0}, {0,3,0}, {1,3,1}, {1,3,0}}},// Twisted hook long mirror
-
-    {{{2,0,0}, {1,0,0}, {1,1,0}, {0,1,0}, {0,1,1}, {0,2,1}}},// Mutant W
-    {{{2,0,1}, {1,0,1}, {1,1,1}, {0,1,1}, {0,1,0}, {0,2,0}}},// Mutant W mirror
-
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {0,1,0}, {0,1,1}, {0,1,2}}},// Offset L
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {0,0,1}, {0,1,1}, {0,2,1}}},// Offset L mirror
-
-    {{{0,0,0}, {1,0,0}, {1,1,0}, {1,1,1}, {1,2,0}, {2,2,0}}},// S with side tab
-    {{{0,0,0}, {0,1,0}, {1,1,0}, {1,1,1}, {2,1,0}, {2,2,0}}},// S with side tab mirror
-
-    {{{0,0,0}, {0,0,1}, {0,1,0}, {1,1,0}, {1,2,0}, {1,2,1}}},// small s with tabs
-    {{{0,0,0}, {0,0,1}, {1,0,0}, {1,1,0}, {2,1,0}, {2,1,1}}},// small s with tabs mirror
-
-    // symetrical hexominos
-    {{{0,1,0}, {1,1,0}, {2,1,0}, {1,0,1}, {1,1,1}, {1,2,1}}},// Crossing 3's
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {1,1,0}, {1,2,0}, {1,2,1}}},// T with hooked stem
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {1,1,0}, {1,1,1}, {1,2,1}}},// T with folded stem
-
-    // Flat hexominos
-    {{{0,0,0}, {0,1,0}, {0,1,1}, {0,1,2}, {0,1,3}, {0,2,3}}},// s
-    {{{0,0,0}, {1,0,0}, {0,0,1}, {0,0,2}, {0,0,3}, {0,0,4}}},// bench dog
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {0,0,1}, {0,0,2}, {0,0,3}}},// L
-    {{{0,0,0}, {1,0,0}, {1,1,0}, {1,2,0}, {2,2,0}, {1,3,0}}},// Stretched r
-    {{{0,0,0}, {1,0,0}, {0,1,0}, {0,2,0}, {0,3,0}, {1,3,0}}},// big C
-    {{{0,0,0}, {0,1,0}, {1,1,0}, {1,2,0}, {1,3,0}, {2,3,0}}},// Mutant W
-    {{{0,0,0}, {0,0,1}, {0,1,1}, {0,0,2}, {0,0,3}, {0,0,4}}},// Five with a tab.
-    {{{0,0,0}, {1,0,0}, {2,0,0}, {2,1,0}, {2,2,0}, {3,2,0}}},// L with hook
-#endif
 
 //---------------------------------------------------------
 
@@ -146,7 +98,7 @@ typedef int BOOL;
 //  |/
 //  +----> X
 
-static char CharGraph[GRIDHEIGHT][GRIDWIDTH];
+thread_local static char CharGraph[GRIDHEIGHT][GRIDWIDTH];
 
 #define OMIT_LEFT_FRONT_EDGE 1
 #define OMIT_LEFT_TOP_EDGE 2
@@ -631,9 +583,9 @@ typedef struct {
     }FitOpt[24];
 }PieceData_t;
 
-PieceData_t AllPieces[NUM_PIECES];
+thread_local PieceData_t AllPieces[NUM_PIECES];
 
-int PlacementsTried = 0;
+thread_local int PlacementsTried = 0;
 
 //-------------------------------------------------------------------------------
 // Prepare 3d representations of all possible pieces in all orientations.
@@ -847,8 +799,8 @@ typedef struct {
     int Orientation;
 }PlacedPos_t;
 
-PlacedPos_t Placed[NUM_PIECES+100];
-int NumPlaced;
+thread_local PlacedPos_t Placed[NUM_PIECES+100];
+thread_local int NumPlaced;
 
 //-------------------------------------------------------------------------------
 // Show the puzzle solution.
@@ -931,8 +883,8 @@ void ShowSolution(Field_t * Field)
     }
 }
 
-Field_t Stages[NUM_PIECES+1];
-int BackupTo;
+thread_local Field_t Stages[NUM_PIECES+1];
+thread_local int BackupTo;
 
 //-------------------------------------------------------------------------------
 // Recursive puzzle solving...
