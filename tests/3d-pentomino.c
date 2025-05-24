@@ -11,7 +11,13 @@
 #include <memory.h>
 #include <stdlib.h>
 #include <windows.h>
-#define thread_local __declspec(thread) 
+
+#ifdef _MSC_VER
+    #define thread_local __declspec(thread) 
+#else
+    #define thread_local __thread
+#endif
+
 
 // Always make X size the largest for faster solving.
 // A map of x*y*z = 10*5*3 solves fastest
@@ -98,7 +104,7 @@ typedef int BOOL;
 //  |/
 //  +----> X
 
-thread_local static char CharGraph[GRIDHEIGHT][GRIDWIDTH];
+static thread_local char CharGraph[GRIDHEIGHT][GRIDWIDTH];
 
 #define OMIT_LEFT_FRONT_EDGE 1
 #define OMIT_LEFT_TOP_EDGE 2

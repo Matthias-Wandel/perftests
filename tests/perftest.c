@@ -21,19 +21,20 @@
 #include <memory.h>
 #ifdef _WINDOWS
     #include <windows.h>
-    #if _MSC_VER < 1300
+    #if _MSC_VER > 0 && _MSC_VER < 1300
         // Make it work with the compiler from 2008 on my windows XP box.
         #define GetCurrentProcessorNumber() 0
     #endif
 #else
-    #include <sched.h>
+    #define _GNU_SOURCE
     #include <unistd.h>
+    #include <sched.h>
     #include <stdint.h>
     #include <sys/utsname.h>
 
     #define Sleep(a) usleep((a)*1000)
     #ifdef __linux__
-        #define GetCurrentProcessorNumber() sched_getcpu()
+        #define GetCurrentProcessorNumber() 0//sched_getcpu()
     #else
         // Assume OS-X.  Doesn't appear to be a good way to get core number.
         #define GetCurrentProcessorNumber() 0
@@ -225,10 +226,10 @@ double TimeFunction(int WhichOne, int * CoresRunOn, uint8_t * buffer, int size)
     core_after = GetCurrentProcessorNumber();
 
     const char * str = NULL;
+    char strbuf[30];
     if (WhichOne < NUM_TESTS){
         str = Methods[WhichOne];
     }else{
-        char strbuf[20];
         sprintf(strbuf,"CRC_MULTI %2d",WhichOne-10);
         str = strbuf;
     }

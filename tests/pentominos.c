@@ -21,7 +21,12 @@ typedef unsigned short WORD;
 #define TRUE 1
 //#pragma pack(push,1)
 
-#define thread_local __declspec(thread) 
+#ifdef _MSC_VER
+    #define thread_local __declspec(thread) 
+#else
+    #define thread_local __thread
+#endif
+
 
 typedef struct {
     BYTE Used[5][8];
