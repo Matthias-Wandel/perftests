@@ -1,13 +1,3 @@
-I'm using too many windows specific APIs that I don't even know if 
-I can still support the linux build
-I don't know what the equivalent APIs under linux would be.
-
-Specifically:
-    * query which processor I'm on
-    * Set processor affinity
-    * Set process priority
-    * Thread local storage
-
 # Makefile for Linux using GCC
 # 
 # For compiling with micorosft MSVC, use make.bat

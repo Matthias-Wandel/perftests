@@ -10,8 +10,9 @@
 #include <stdio.h>
 #include <memory.h>
 #include <stdlib.h>
-#include <windows.h>
-
+#if _WIN32 || _WIN64
+    #include <windows.h>
+#endif
 #ifdef _MSC_VER
     #define thread_local __declspec(thread) 
 #else

@@ -7,11 +7,13 @@
 #include <stdio.h>
 #include <memory.h>
 #include <time.h>
-#include <windows.h>
+
+#if _WIN32 || _WIN64
+    #include <windows.h>
+#endif
+
 #include "perftest.h"
-
 #define COMBINED_CHECK  // Makes it in 48 seconds on my Celeron 500
-
 #define SHOW_SOLUTIONS 0
 
 typedef unsigned char BYTE;

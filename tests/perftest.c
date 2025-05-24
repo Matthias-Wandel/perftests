@@ -4,10 +4,7 @@
 //    branches in the if_else crc routine.
 //----------------------------------------------------------------------------
 #define _CRT_SECURE_NO_WARNINGS
-#ifdef _WIN32
-    #define _WINDOWS 1
-#endif
-#ifdef _WIN64
+#if _WIN32 || _WIN64
     #define _WINDOWS 1
 #endif
 
@@ -31,15 +28,15 @@
     #include <sched.h>
     #include <stdint.h>
     #include <sys/utsname.h>
+    #include <pthread.h>
 
     #define Sleep(a) usleep((a)*1000)
     #ifdef __linux__
-        #define GetCurrentProcessorNumber() 0//sched_getcpu()
+        #define GetCurrentProcessorNumber() sched_getcpu()
     #else
         // Assume OS-X.  Doesn't appear to be a good way to get core number.
         #define GetCurrentProcessorNumber() 0
     #endif
-
 #endif
 #include "perftest.h"
 
@@ -243,9 +240,9 @@ double TimeFunction(int WhichOne, int * CoresRunOn, uint8_t * buffer, int size)
 
 
 #ifdef _WINDOWS
-void SetProcessorAffinity(int n)
+void SetProcessorAffinity(int core_no)
 {
-    DWORD_PTR mask = 1ULL << n;
+    DWORD_PTR mask = 1ULL << core_no;
 
     HANDLE thread = GetCurrentThread();
     DWORD_PTR result = SetThreadAffinityMask(thread, mask);
@@ -256,7 +253,7 @@ void SetProcessorAffinity(int n)
         printf("Failed to set affinity. Error code: %lu\n", error);
     } else {
         // Success
-        printf("Affinity set to processor %d\n",n);
+        printf("Affinity set to processor %d\n",core_no);
     }
 }
 
@@ -273,8 +270,34 @@ void SetProcessPriority(BOOL highPriority)
                highPriority ? "HIGH" : "IDLE");
     }
 }
-#endif
+#else
+void SetProcessorAffinity(int core_id)
+{
+    cpu_set_t cpuset;
+    pthread_t thread = pthread_self();
 
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+
+    int result = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+    if (result != 0) {
+        perror("pthread_setaffinity_np");
+    }else{
+        printf("Affinity set to processor %d\n",core_id);
+    }
+}
+void SetProcessPriority(int highPriority)
+{
+    struct sched_param param;
+    param.sched_priority = highPriority ? 1 : 20; // Range: 1 (lowest) to 99 (highest)
+
+    if (sched_setscheduler(0, SCHED_RR, &param) == -1) {
+        perror("sched_setscheduler (priority)");
+        exit(EXIT_FAILURE);
+    }
+    printf("Priocess priority set to %s\n",highPriority ? "HIGH" : "IDLE");
+}
+#endif
 
 static char AboutString[100];
 static int BufferSize = 100000;
@@ -289,7 +312,12 @@ static int Priority = -1;
 // Run the tests.
 // There may be multiple instances of this running at the same time
 //----------------------------------------------------------------------------
+
+#ifdef _WINDOWS
 DWORD WINAPI DoTests(LPVOID param)
+#else
+void * DoTests(void * param)
+#endif
 {
     ThreadPassParms_t * Parms = param;
 
@@ -305,8 +333,11 @@ DWORD WINAPI DoTests(LPVOID param)
             }
         }
     }
-
+#ifdef _WINDOWS
     return 0;
+#else
+    return NULL;
+#endif
 }
 
 #define MAX_PROCESSES 32
@@ -470,24 +501,7 @@ int main(int argc, char *argv[])
         Parms[0].Affinity = ProcessorAffinities[0];
         DoTests(&Parms[0]);
     }else{
-#if 0 // Posix method, untested.
-        Pthread_t threads[MAX_PROCESSES];
-
-        for (int a=0;a<NumAffinities;a++){
-            Parms[a].Affinity = ProcessorAffinities[a];
-            if (pthread_create(&threads[a], NULL, DoTests, &Parms[a]) != 0) {
-                perror("pthread_create");
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        printf("Threads launched\n")
-        // Wait for all threads to finish
-        for (int a = 0; a < NumAffinities; a++) {
-            pthread_join(threads[a], NULL);
-            printf("thread %d done\n",a);
-        }
-#else
+#ifdef _WINDOWS
         HANDLE threads[MAX_PROCESSES];
         for (int a=0;a<NumAffinities;a++){
             Parms[a].Affinity = ProcessorAffinities[a];
@@ -506,7 +520,23 @@ int main(int argc, char *argv[])
 
         // Wait for all threads to finish
         WaitForMultipleObjects(NumAffinities, threads, TRUE, INFINITE);
+#else
+        pthread_t threads[MAX_PROCESSES];
 
+        for (int a=0;a<NumAffinities;a++){
+            Parms[a].Affinity = ProcessorAffinities[a];
+            if (pthread_create(&threads[a], NULL, DoTests, &Parms[a]) != 0) {
+                perror("pthread_create");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        printf("Threads launched\n");
+        // Wait for all threads to finish
+        for (int a = 0; a < NumAffinities; a++) {
+            pthread_join(threads[a], NULL);
+            printf("thread %d done\n",a);
+        }
 #endif
     }
     free(buffer);

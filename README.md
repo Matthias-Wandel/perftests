@@ -13,5 +13,4 @@ and performance cores.
 These are a companion to my video
 <a href="https://youtu.be/m7PVZixO35c">New computers don't speed up old code</a>
 <p>
-This used to run on Linux as well, but I have not ported use of the threading
-related APIs to linux.
+This program also compiles on linux.
