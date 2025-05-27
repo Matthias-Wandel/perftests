@@ -43,6 +43,7 @@
 typedef struct {
     int Affinity;
     double Times[30];
+    int NumRuns[30];
     int CoresRunOn[30][2];
 }ThreadPassParms_t;
 
@@ -308,6 +309,13 @@ static int TestEndAt = 10+NUM_CRC_MULTI;
 static int Repetitions = 1;
 static int Priority = -1;
 
+#define MAX_PROCESSES 32
+ThreadPassParms_t Parms[MAX_PROCESSES] = {0};
+int ProcessorAffinities[MAX_PROCESSES] = {-1};
+int NumAffinities = 0;
+int QuitOnFirstDone = FALSE;
+volatile int FirstProcessorDone = FALSE;
+
 //----------------------------------------------------------------------------
 // Run the tests.
 // There may be multiple instances of this running at the same time
@@ -329,21 +337,24 @@ void * DoTests(void * param)
     for (int a=TestStartAt;a<=TestEndAt;a++){
         if (a<NUM_TESTS || a > 10){
             for (int r=0; r<Repetitions;r++){
-                Parms->Times[a] += TimeFunction(a, Parms->CoresRunOn[a],buffer,BufferSize);
+                double time = TimeFunction(a, Parms->CoresRunOn[a],buffer,BufferSize);
+                if (FirstProcessorDone) break; // Abort if another core is done.
+                Parms->Times[a] += time;
+                Parms->NumRuns[a] += 1;
             }
         }
+
+        if (FirstProcessorDone) break; // Abort if another core is done.
     }
+    if (!FirstProcessorDone)
+    FirstProcessorDone = TRUE;
+
 #ifdef _WINDOWS
     return 0;
 #else
     return NULL;
 #endif
 }
-
-#define MAX_PROCESSES 32
-ThreadPassParms_t Parms[MAX_PROCESSES] = {0};
-int ProcessorAffinities[MAX_PROCESSES] = {-1};
-int NumAffinities = 0;
 
 
 //----------------------------------------------------------------------------
@@ -355,6 +366,7 @@ void PrintResults(FILE * outfile)
 
     for (int n=0;n<nres;n++){
         double * Times = Parms[n].Times;
+        int * NumRuns = Parms[n].NumRuns;
         int (*CoresRunOn)[2] = Parms[n].CoresRunOn;
 
         fprintf(outfile,"Compiled         ,Computer      ");
@@ -364,7 +376,11 @@ void PrintResults(FILE * outfile)
         if (TestStartAt < 10){
             fprintf(outfile,"%s",AboutString);
             // Print the timing results.
-            for (int a=0;a<NUM_TESTS;a++) fprintf(outfile,", %10.3f",Times[a]/Repetitions);
+            for (int a=0;a<NUM_TESTS;a++){
+                double Avg = 0;
+                if (NumRuns[a]) Avg = Times[a]/NumRuns[a];
+                fprintf(outfile,", %10.3f",Avg);
+            }
             fprintf(outfile,"\n");
 
             fprintf(outfile,"Cores run on:");
@@ -382,7 +398,11 @@ void PrintResults(FILE * outfile)
         if (TestEndAt > 10){
             fprintf(outfile,"%s,CRCMulti",AboutString);
             // Print the timing results.
-            for (int a=0;a<12;a++) fprintf(outfile,",%6.3f",Times[a+10]/Repetitions);
+            for (int a=0;a<12;a++){
+                double Avg = 0;
+                if (NumRuns[a+10]) Avg = Times[a+10]/NumRuns[a+10];
+                fprintf(outfile,",%6.3f",Avg);
+            }
             fprintf(outfile,"\n");
             fprintf(outfile,"Cores run on:");
             for (int a=10;a<22;a++){
@@ -408,12 +428,16 @@ void Usage(void)
            "Options are:\n"
            "   -t[n]       Run only test [n]\n"
            "   -t[s]-[e]   Run only test [s] thru [e]\n"
-           "   -r[n]       Repeat each thest [n] times\n"
+           "   -r[n]       Repeat each test [n] times\n"
            "   -p1         Set to run as high priority\n"
            "   -p0         Set to run as background priority\n"
-           "   -a[n]       Set pricessor affinity to [n].  To run\n"
-           "               multiple threads, specify -a[n] more than once.\n"
-           "               if [n] is -1, this means any thread\n"
+           "   -a[n]       Set pricessor affinity to [n].  To run multiple threads,\n"
+           "               specify -a[n] more than once.\n"
+           "               if [n] is absent or -1, this means any thread\n"
+           "   -q          Abort tests as soon as one core is done.  Useful when\n"
+           "               when testing load with reperated test on P cores and E cores\n"
+           "               at the same time -- quite whe no longer fully loaded.\n"
+
            );
     exit(-1);
 }
@@ -469,6 +493,11 @@ int main(int argc, char *argv[])
                     printf("Too many affinities specified");
                 }
                 break;
+
+            case 'q':
+                QuitOnFirstDone = TRUE;
+                break;
+
             default:
                 printf("Argumant '%s' not understoond\n",argv[a]);
                 Usage();
@@ -497,6 +526,7 @@ int main(int argc, char *argv[])
     #endif
 
 
+    FirstProcessorDone = FALSE;
     if (NumAffinities <= 1){
         Parms[0].Affinity = ProcessorAffinities[0];
         DoTests(&Parms[0]);
