@@ -95,9 +95,11 @@ PieceList_t Pieces[NUM_PIECES] = {
 #define GRIDWIDTH 150
 #define GRIDHEIGHT 60
 
-#define TRUE 1
-#define FALSE 0
-typedef int BOOL;
+#ifndef TRUE
+    #define TRUE 1
+    #define FALSE 0
+    typedef int BOOL;
+#endif
 
 //  Y   Z
 //
@@ -116,9 +118,6 @@ static thread_local char CharGraph[GRIDHEIGHT][GRIDWIDTH];
 
 #define CUBENUM_HILIGHT (-100)
 
-#define bool int
-#define TRUE 1
-#define FALSE 0
 
 //-------------------------------------------------------------------------------
 // Add a cube to the display buffer.

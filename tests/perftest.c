@@ -47,6 +47,11 @@ typedef struct {
     int CoresRunOn[30][2];
 }ThreadPassParms_t;
 
+#ifndef TRUE
+    #define TRUE 1
+    #define FALSE 0
+    typedef int BOOL;
+#endif
 
 //----------------------------------------------------------------------------
 // Get computer name for logging purposes.
